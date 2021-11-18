@@ -1,10 +1,9 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-# import torchvision
 import os
 import codecs
-# import matplotlib.pyplot as plt
+import random
 
 # based on https://pytorch.org/docs/1.1.0/_modules/torchvision/datasets/mnist.html
 def get_int(b):
@@ -32,53 +31,47 @@ class MnistBatch():
     def __init__(self, config, valid=False):
         self.config = config
         datasets_dir = './train/datasets/'
-        # torchvision.datasets.MNIST('./train/datasets', train=True, download=True)
-        # torchvision.datasets.MNIST('./train/datasets', train=False, download=True)
+        self.valid = valid
         self.mnist_train_images = read_image_file(datasets_dir+'MNIST/raw/train-images-idx3-ubyte')
         self.mnist_train_labels = read_label_file(datasets_dir+'MNIST/raw/train-labels-idx1-ubyte')
 
-        # to_pil_image = torchvision.transforms.ToPILImage(mode=None)
-        # center_crop = torchvision.transforms.CenterCrop(25)
-        # resize = torchvision.transforms.Resize(self.config['image_h'], interpolation=5)
-        # pil_to_tensor = torchvision.transforms.ToTensor()
-
-        # train_batch = []
-        # train_labels = []
-        # for b_idx in range(self.mnist_train_images.shape[0]):
-        #     if self.mnist_train_labels[b_idx] in self.config['classes']:
-        #         print('----')
-        #         data = self.mnist_train_images[b_idx]
-        #         for col in data:
-        #             for row in col:
-        #                 print(round(float(row),2), end='\t')
-        #             print('')
-        #         pil_image = to_pil_image(self.mnist_train_images[b_idx])
-        #         pil_image = center_crop(pil_image)
-        #         pil_image = resize(pil_image)
-        #         image = pil_to_tensor(pil_image).squeeze_(0)
-        #         print(self.mnist_train_labels[b_idx])
-        #         for col in image:
-        #             for row in col:
-        #                 print(round(float(row),4), end='\t')
-        #             print('')
-        #         train_batch.append(image)
-        #         if len(train_batch) > 100:
-        #             quit()
-        #         train_labels.append(self.config['classes'].index(self.mnist_train_labels[b_idx]))
-        # self.mnist_train_images = train_batch
-        # self.mnist_train_labels = train_labels
+        self.mnist_valid_images = self.mnist_train_images[0:5000]
+        self.mnist_valid_labels = self.mnist_train_labels[0:5000]
+        self.mnist_train_images = self.mnist_train_images[5000:]
+        self.mnist_train_labels = self.mnist_train_labels[5000:]
 
     def on_epoch_end(self):
         pass
 
     def __len__(self):
-        return len(self.mnist_train_images)
+        if not self.valid:
+            return len(self.mnist_train_images)
+        else:
+            return len(self.mnist_valid_images)
 
     def __getitem__(self, idx):
-        data = self.mnist_train_images[idx]
-        target = self.mnist_train_labels[idx]
+        if not self.valid:
+            data = self.mnist_train_images[idx]
+            target = self.mnist_train_labels[idx]
+        else:
+            data = self.mnist_valid_images[idx]
+            target = self.mnist_valid_labels[idx]
+
+
         data = (data).type(torch.FloatTensor)
         data = data / 256.0
+
+        for i in range(0, data.shape[0]):
+            for ii in range(0, data.shape[1]):
+                if float(data[i,ii].item()) != 0.0:
+                    rnd = random.random()
+                    if rnd > data[i,ii]:
+                        data[i,ii] = 0.0
+                    else:
+                        data[i,ii] = 1.0
+        #         print(int(data[i,ii].item()), end='')
+        #     print("")
+        # print(target)
 
         return data, target
 

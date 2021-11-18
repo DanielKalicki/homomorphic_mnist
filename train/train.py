@@ -12,14 +12,14 @@ import numpy as np
 import math
 import random
 
-config_idx = int(sys.argv[1])
+config_name = sys.argv[1]
 
 config = {
     'batch_size': 32,
     'image_h': 28,
     'image_w': 28,
     'class_num': 10,
-    'name': '_' + str(config_idx),
+    'name': '_' + str(config_name),
     'training': {
         'log': True,
         'lr': 1e-3,
@@ -37,19 +37,6 @@ if config['training']['log']:
     now = datetime.now()
     writer = SummaryWriter(log_dir="./train/logs/"+config['name'])
 
-class LabelSmoothingCrossEntropy(torch.nn.Module):
-    # based on https://github.com/seominseok0429/label-smoothing-visualization-pytorch
-    def __init__(self):
-        super(LabelSmoothingCrossEntropy, self).__init__()
-    def forward(self, x, target, smoothing=0.2):
-        confidence = 1. - smoothing
-        logprobs = F.log_softmax(x, dim=-1)
-        nll_loss = -logprobs.gather(dim=-1, index=target.unsqueeze(1))
-        nll_loss = nll_loss.squeeze(1)
-        smooth_loss = -logprobs.mean(dim=-1)
-        loss = confidence * nll_loss + smoothing * smooth_loss
-        return torch.mean(loss)
-
 def train(model, device, loader, optimizer, epoch, scheduler):
     loss = run(model, device, loader, optimizer, epoch, mode="train", scheduler=scheduler)
     return loss
@@ -63,12 +50,12 @@ def run(model, device, loader, optimizer, epoch, mode="train", scheduler=None):
     if mode == "test":
         model.eval()
     loss_pred = 0.0
+    hidd_std_ = []
     total = 0
     correct = 0
 
     start = time.time()
     pbar = tqdm(total=len(loader), dynamic_ncols=True)
-    criterion = torch.nn.CrossEntropyLoss(reduction='mean')
 
     for batch_idx, (data, label) in enumerate(loader):
         if mode == 'train':
@@ -80,12 +67,22 @@ def run(model, device, loader, optimizer, epoch, mode="train", scheduler=None):
         if mode == "train":
             optimizer.zero_grad()
 
-        pred = model(data)
+        print(data[1].flatten())
+        print(label[1])
+        np.savetxt(str(label[1]), data[1].flatten().detach().cpu().numpy().reshape((1, -1)), fmt='%1.3e', delimiter=",")
+        pred, x_hidd = model(data)
+        print(pred[0])
+        exit(0)
         loss = F.cross_entropy(pred, label, reduction='mean')
 
-        for name, param in model.named_parameters():
-            if param.requires_grad:
-                print(name, param.data)
+        # for name, param in model.named_parameters():
+        #     if param.requires_grad:
+        #         print(name, param.data)
+        # print(x_hidd[0])
+        hidd_std = torch.mean(torch.std(x_hidd,1))
+        # print(x_hidd[0])
+        # print(hidd_std)
+        hidd_std_.append(hidd_std)
 
         _, predicted = torch.max(pred, 1)
         total += label.size(0)
@@ -94,7 +91,7 @@ def run(model, device, loader, optimizer, epoch, mode="train", scheduler=None):
         if not math.isnan(float(loss)):
             loss_pred += loss.detach()
             if mode == "train":
-                loss.backward(retain_graph=False)
+                (loss).backward(retain_graph=False)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
         pbar.update(1)
@@ -111,6 +108,7 @@ def run(model, device, loader, optimizer, epoch, mode="train", scheduler=None):
     print('\t\t' + mode + ' time: {:.2f}'.format((end - start)))
     if config['training']['log']:
         writer.add_scalar('loss_pred/'+mode, loss_pred, epoch)
+        writer.add_scalar('hidd_std/'+mode, sum(hidd_std_)/float(len(hidd_std_)), epoch)
         writer.add_scalar('acc/'+mode, correct/(float(total)+1e-6), epoch)
         writer.flush()
     return loss
@@ -142,6 +140,16 @@ for epoch in range(start_epoch, config['training']['epochs'] + start_epoch):
     dataset_train.on_epoch_end()
     dataset_test.on_epoch_end()
     print("mean="+str(test_loss))
+    if current_test_loss < test_loss:
+        for name, param in model.named_parameters():
+            print('name: ', name)
+            param_ = param.detach().cpu().numpy()
+            if "bias" in name:
+                param_ = param_.reshape((1, -1))
+            np.savetxt('train/save/'+name, param_, fmt='%1.3e', delimiter=",")
+            print('param.shape: ', param.shape)
+            print('=====')
+        test_loss = current_test_loss
     scheduler.step()
 
 if config['training']['log']:
