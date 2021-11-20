@@ -54,7 +54,7 @@ std::vector<double> extractImageData(std::string data){
 
 std::tuple<LPKeyPair<DCRTPoly>, CryptoContext<DCRTPoly>, uint>
 ckksEncrypt(std::vector<double> input) {
-  uint32_t multDepth = 10;
+  uint32_t multDepth = 5;
   uint32_t scaleFactorBits = 50;
   uint32_t batchSize = 1024;
   SecurityLevel securityLevel = HEStd_128_classic;
@@ -88,8 +88,6 @@ ckksEncrypt(std::vector<double> input) {
 
   // Encoding as plaintexts
   Plaintext ptxt1 = cc->MakeCKKSPackedPlaintext(x1);
-
-  std::cout << "Input x1: " << ptxt1 << std::endl;
 
   // Encrypt the encoded vectors
   auto c1 = cc->Encrypt(keys.publicKey, ptxt1);
@@ -470,9 +468,15 @@ int main() {
         std::cout << std::endl << "Results of homomorphic computations: " << std::endl;
 
         cc->Decrypt(keys.secretKey, cFinal, &result);
-        result->SetLength(8);
+        result->SetLength(10);
         std::cout << "xFinal = " << result;
         std::cout << "Estimated precision in bits: " << result->GetLogPrecision() << std::endl;
+        auto prediction = result->GetCKKSPackedValue();
+        int counter = 0;
+        for (auto &value : prediction ){
+          std::cout << counter << " -> " << std::real(value) << std::endl;
+          counter++;
+        }
       }
     }
 
